@@ -1,9 +1,18 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { PrismaClient } from "@prisma/client";
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
-const defaultStoreFile = resolve(currentDir, "../data/runtime-store.json");
+const runtimeStoreStateKey = "runtime-store";
+const globalForPrisma = globalThis as typeof globalThis & {
+  clawFightPrisma?: PrismaClient;
+};
+const prisma =
+  globalForPrisma.clawFightPrisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"]
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.clawFightPrisma = prisma;
+}
 
 export type PersistedState<TStore> = {
   runtimeStore: TStore;
@@ -11,30 +20,37 @@ export type PersistedState<TStore> = {
   messageCounter: number;
 };
 
-export function getStoreFilePath() {
-  return resolve(process.cwd(), process.env.BATTLE_STORE_FILE ?? defaultStoreFile);
-}
-
 export async function loadPersistedState<TStore>() {
-  const storeFile = getStoreFilePath();
-
-  try {
-    const raw = await readFile(storeFile, "utf8");
-    return JSON.parse(raw) as PersistedState<TStore>;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
+  const record = await prisma.appState.findUnique({
+    where: {
+      key: runtimeStoreStateKey
     }
+  });
 
-    throw error;
+  if (!record) {
+    return null;
   }
+
+  return JSON.parse(record.value) as PersistedState<TStore>;
 }
 
 export async function savePersistedState<TStore>(state: PersistedState<TStore>) {
-  const storeFile = getStoreFilePath();
-  await mkdir(dirname(storeFile), { recursive: true });
+  const serializedState = JSON.stringify(state);
 
-  const tempFile = `${storeFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(tempFile, JSON.stringify(state, null, 2), "utf8");
-  await rename(tempFile, storeFile);
+  await prisma.appState.upsert({
+    where: {
+      key: runtimeStoreStateKey
+    },
+    create: {
+      key: runtimeStoreStateKey,
+      value: serializedState
+    },
+    update: {
+      value: serializedState
+    }
+  });
+}
+
+export async function closePersistence() {
+  await prisma.$disconnect();
 }

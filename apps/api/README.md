@@ -3,7 +3,7 @@
 Current scaffold:
 
 - Express server with JSON and CORS enabled
-- File-backed runtime persistence for battle state
+- Prisma + SQLite runtime persistence for battle state
 - `GET /health`
 - `GET /topics`
 - `GET /battles/:battleId`
@@ -20,11 +20,14 @@ Useful commands from repo root:
 - `npm run dev:api`
 - `npm run typecheck:api`
 - `npm run build:api`
+- `npm run prisma:generate`
+- `npm run prisma:migrate -- --name init_app_state`
 
 Persistence notes:
 
-- Default file: `apps/api/data/runtime-store.json`
-- Override with `BATTLE_STORE_FILE=/absolute/or/relative/path.json`
+- Set `DATABASE_URL`, for example `file:./dev.db`
+- The API stores the whole runtime snapshot in the `AppState` table under a single `runtime-store` key
+- Keep `prisma/dev.db` local; do not commit generated database files
 
 Runtime notes:
 

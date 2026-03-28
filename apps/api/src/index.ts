@@ -17,6 +17,7 @@ import {
   listTopics,
   subscribeToBattleEvents
 } from "./store.js";
+import { closePersistence } from "./persistence.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -267,8 +268,11 @@ app.post("/battles/:battleId/finalize", async (request, response) => {
 
 await initializeBattleStore();
 
+let autoAdvanceTimer: ReturnType<typeof setInterval> | null = null;
+let shuttingDown = false;
+
 if (autoAdvanceEnabled) {
-  setInterval(() => {
+  autoAdvanceTimer = setInterval(() => {
     void Promise.all(
       getActiveBattleIds().map((battleId) =>
         advanceBattle({
@@ -280,6 +284,52 @@ if (autoAdvanceEnabled) {
     );
   }, autoAdvanceIntervalMs);
 }
+
+async function shutdown(signal: string) {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down ClawFight API...`);
+
+  if (autoAdvanceTimer) {
+    clearInterval(autoAdvanceTimer);
+    autoAdvanceTimer = null;
+  }
+
+  io.close();
+  const forcedExitTimer = setTimeout(() => {
+    process.exit(process.exitCode ?? 0);
+  }, 1000);
+  forcedExitTimer.unref();
+
+  try {
+    await closePersistence();
+  } catch (error) {
+    console.error("Failed to close Prisma persistence cleanly.", error);
+    process.exitCode = 1;
+  }
+
+  httpServer.close((error) => {
+    clearTimeout(forcedExitTimer);
+    if (error) {
+      console.error("Failed to close the HTTP server cleanly.", error);
+      process.exit(1);
+      return;
+    }
+
+    process.exit(process.exitCode ?? 0);
+  });
+}
+
+process.once("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
 
 httpServer.listen(port, () => {
   console.log(`ClawFight API listening on http://localhost:${port}`);
