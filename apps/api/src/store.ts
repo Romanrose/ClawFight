@@ -1,5 +1,4 @@
 import {
-  actionLabels,
   type ActionType,
   type BattleResult,
   type OutcomeType,
@@ -12,6 +11,7 @@ import {
   type LoadoutCard,
   type MockBattleDetail
 } from "@clawfight/contracts";
+import { createBattleMessageGenerator } from "./generation.js";
 import { loadPersistedState, savePersistedState, type PersistedState } from "./persistence.js";
 
 type BattleEvent =
@@ -64,6 +64,7 @@ const currentUserId = "user_demo";
 let instanceCounter = 100;
 let messageCounter = 2000;
 const battleEventListeners = new Set<BattleEventListener>();
+const messageGenerator = createBattleMessageGenerator();
 const systemSpeakerCatalog = {
   A: [
     {
@@ -345,41 +346,6 @@ export async function enterBattle(input: EnterBattleInput) {
   };
 }
 
-function buildMessageContent(instance: RuntimeInstance, action: ActionType, instruction?: string) {
-  const base = `${instance.nickname}${actionLabels[action]}：${instance.persona}`;
-  if (instruction?.trim()) {
-    return `${base} 本轮策略是“${instruction.trim()}”。`;
-  }
-  return `${base} 继续把节奏往自己这边拉。`;
-}
-
-function buildAutoMessageContent(
-  speaker: { name: string; persona: string; side: "A" | "B" },
-  action: ActionType,
-  detail: RuntimeBattleDetail,
-  source: "manual" | "auto"
-) {
-  const sideName = speaker.side === "A" ? detail.topic.sideAName : detail.topic.sideBName;
-  const base = `${speaker.name}${actionLabels[action]}：${speaker.persona}`;
-  if (source === "manual") {
-    return `${base} 系统补一手，继续替 ${sideName} 扩大当下优势。`;
-  }
-
-  if (action === "EXPOSE") {
-    return `${base} ${sideName} 这边抛出新节点，试图把风向往自己这里继续拉。`;
-  }
-  if (action === "SARCASM") {
-    return `${base} ${sideName} 抓住对面的缝继续阴阳，观众情绪明显被带起来了。`;
-  }
-  if (action === "ANALYZE") {
-    return `${base} ${sideName} 试着把吵架节奏变成论点节奏。`;
-  }
-  if (action === "SUMMARIZE") {
-    return `${base} ${sideName} 开始收口，试图把这一回合定性。`;
-  }
-  return `${base} ${sideName} 继续追打当前最有效的论点。`;
-}
-
 function updateSentiment(detail: RuntimeBattleDetail, action: ActionType) {
   const current = detail.battle.sentiment;
   let positive = current.positive;
@@ -474,6 +440,18 @@ async function appendAutoMessage(detail: RuntimeBattleDetail, source: "manual" |
   const action = pickAutoAction(detail, speaker.side);
   const impact = actionImpactTable[action];
   const direction = speaker.side === "A" ? 1 : -1;
+  const content = await messageGenerator.generateSystemMessage({
+    speakerName: speaker.name,
+    speakerPersona: speaker.persona,
+    side: speaker.side,
+    action,
+    topic: {
+      title: detail.topic.title,
+      sideAName: detail.topic.sideAName,
+      sideBName: detail.topic.sideBName
+    },
+    source
+  });
 
   detail.battle.phase += 1;
   detail.battle.heat = clamp(detail.battle.heat + impact.heat, 0, 100);
@@ -498,7 +476,7 @@ async function appendAutoMessage(detail: RuntimeBattleDetail, source: "manual" |
       speakerName: speaker.name,
       side: speaker.side,
       action,
-      content: buildAutoMessageContent(speaker, action, detail, source),
+      content,
       createdAt: detail.battle.updatedAt,
       impact: {
         deltaHeat: impact.heat,
@@ -551,11 +529,6 @@ async function finalizeBattle(
   const [mvpInstanceId] =
     [...contributionByInstance.entries()].sort((left, right) => right[1] - left[1])[0] ?? [];
 
-  const summaryLead =
-    outcome.winnerSide === "NONE"
-      ? "双方打到最后仍然没有形成绝对胜负。"
-      : `${outcome.winnerSide} 方在关键节点建立了更稳定的优势。`;
-
   const result: BattleResult = {
     battleId: detail.battle.id,
     topicId: detail.topic.id,
@@ -569,7 +542,19 @@ async function finalizeBattle(
       phase: detail.battle.phase
     },
     highlightMessageIds: highlights,
-    summaryText: `${summaryLead} 最终热度 ${detail.battle.heat}，风向 ${detail.battle.swing}，比分 ${detail.battle.scoreA}:${detail.battle.scoreB}。`,
+    summaryText: await messageGenerator.generateSummary({
+      topic: {
+        title: detail.topic.title,
+        sideAName: detail.topic.sideAName,
+        sideBName: detail.topic.sideBName
+      },
+      winnerSide: outcome.winnerSide,
+      outcomeType: outcome.outcomeType,
+      heat: detail.battle.heat,
+      swing: detail.battle.swing,
+      scoreA: detail.battle.scoreA,
+      scoreB: detail.battle.scoreB
+    }),
     createdAt: new Date().toISOString(),
     ...(mvpInstanceId ? { mvpInstanceId } : {})
   };
@@ -642,6 +627,12 @@ export async function applyAction(input: CreateActionInput) {
   }
   detail.battle.updatedAt = new Date().toISOString();
   detail.battle.lastMessageAt = detail.battle.updatedAt;
+  const content = await messageGenerator.generateUserMessage({
+    speakerName: refreshedInstance.nickname,
+    speakerPersona: refreshedInstance.persona,
+    action: input.action,
+    ...(input.instruction ? { instruction: input.instruction } : {})
+  });
 
   messageCounter += 1;
   const messageId = `msg_${messageCounter}`;
@@ -655,7 +646,7 @@ export async function applyAction(input: CreateActionInput) {
       speakerName: refreshedInstance.nickname,
       side: refreshedInstance.side,
       action: input.action,
-      content: buildMessageContent(refreshedInstance, input.action, input.instruction),
+      content,
       createdAt: detail.battle.updatedAt,
       impact: {
         deltaHeat: impact.heat,

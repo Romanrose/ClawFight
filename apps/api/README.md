@@ -13,6 +13,7 @@ Current scaffold:
 - `POST /battles/:battleId/advance`
 - Background auto-advance loop for active battles
 - Rolling sentiment snapshot history per battle
+- Pluggable message generation provider for user/system text and summaries
 
 Useful commands from repo root:
 
@@ -29,3 +30,5 @@ Runtime notes:
 
 - Auto-advance is enabled by default
 - Tune with `AUTO_ADVANCE_ENABLED` and `AUTO_ADVANCE_INTERVAL_MS`
+- Message generation provider defaults to `template`
+- Switch with `GENERATION_PROVIDER=template|mock-llm`
