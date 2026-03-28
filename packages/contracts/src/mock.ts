@@ -1,4 +1,5 @@
 import type {
+  BattleResult,
   BattleMessage,
   BattleState,
   CharacterInstance,
@@ -26,6 +27,7 @@ export type MockBattleDetail = {
   messages: BattleMessage[];
   loadout: LoadoutCard[];
   availableCharacters: MockCharacterCard[];
+  result?: BattleResult;
 };
 
 export type MockCharacterCard = {

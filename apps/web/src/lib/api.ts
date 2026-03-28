@@ -1,4 +1,5 @@
 import {
+  type BattleResult,
   mockBattleDetailsById,
   mockTopics,
   type MockBattleDetail,
@@ -34,5 +35,13 @@ export async function getBattleDetail(battleId: string): Promise<MockBattleDetai
     return await readJson<MockBattleDetail>(`/battles/${battleId}/detail`);
   } catch (_error) {
     return mockBattleDetailsById[battleId] ?? null;
+  }
+}
+
+export async function getBattleResult(battleId: string): Promise<BattleResult | null> {
+  try {
+    return await readJson<BattleResult>(`/battles/${battleId}/result`);
+  } catch (_error) {
+    return mockBattleDetailsById[battleId]?.result ?? null;
   }
 }

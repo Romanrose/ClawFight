@@ -8,6 +8,7 @@ type ActionDockProps = {
   busy?: boolean;
   onEnterBattle?: (payload?: { side: "A" | "B" | "NEUTRAL"; slots: string[] }) => Promise<void>;
   onActionSubmit?: (action: ActionType, instruction: string) => Promise<void>;
+  onFinalize?: () => Promise<void>;
 };
 
 const defaultActionOrder: ActionType[] = [
@@ -19,7 +20,13 @@ const defaultActionOrder: ActionType[] = [
   "SUMMARIZE"
 ];
 
-export function ActionDock({ detail, busy = false, onEnterBattle, onActionSubmit }: ActionDockProps) {
+export function ActionDock({
+  detail,
+  busy = false,
+  onEnterBattle,
+  onActionSubmit,
+  onFinalize
+}: ActionDockProps) {
   const [instruction, setInstruction] = useState("抓住对面逻辑漏洞，别太脏");
 
   const suggestedSlots = useMemo(
@@ -36,7 +43,7 @@ export function ActionDock({ detail, busy = false, onEnterBattle, onActionSubmit
         </p>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || detail.battle.status === "ENDED"}
           onClick={() => onEnterBattle?.({ side: "A", slots: suggestedSlots })}
           className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -75,9 +82,9 @@ export function ActionDock({ detail, busy = false, onEnterBattle, onActionSubmit
             <button
               key={action}
               type="button"
-              disabled={busy}
+              disabled={busy || detail.battle.status === "ENDED"}
               onClick={() => onActionSubmit?.(action, instruction)}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.06]"
+              className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {actionLabels[action]}
             </button>
@@ -92,6 +99,15 @@ export function ActionDock({ detail, busy = false, onEnterBattle, onActionSubmit
             className="mt-2 min-h-24 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-200 outline-none transition focus:border-white/20"
           />
         </div>
+
+        <button
+          type="button"
+          disabled={busy || detail.battle.status === "ENDED"}
+          onClick={() => onFinalize?.()}
+          className="mt-4 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm font-medium text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {detail.battle.status === "ENDED" ? "已封盘" : "手动封盘结算"}
+        </button>
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-xs text-slate-400">可选角色</p>

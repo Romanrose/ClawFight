@@ -1,4 +1,10 @@
-import { actionLabels, type ActionType, type Side } from "@clawfight/contracts";
+import {
+  actionLabels,
+  type ActionType,
+  type BattleResult,
+  type OutcomeType,
+  type Side
+} from "@clawfight/contracts";
 import {
   mockBattleDetailsById,
   mockCharacterCatalog,
@@ -127,7 +133,8 @@ function toPublicDetail(detail: RuntimeBattleDetail): MockBattleDetail {
     battle: detail.battle,
     messages: detail.messages,
     loadout: buildLoadoutCards(detail),
-    availableCharacters: detail.availableCharacters
+    availableCharacters: detail.availableCharacters,
+    ...(detail.result ? { result: detail.result } : {})
   };
 }
 
@@ -159,9 +166,16 @@ export function getBattleSentiment(battleId: string) {
   return runtimeStore[battleId]?.battle.sentiment ?? null;
 }
 
+export function getBattleResult(battleId: string) {
+  return runtimeStore[battleId]?.result ?? null;
+}
+
 export function enterBattle(input: EnterBattleInput) {
   const detail = runtimeStore[input.battleId];
   if (!detail) return null;
+  if (detail.battle.status === "ENDED") {
+    throw new Error("Battle already ended.");
+  }
 
   if (input.slots.length < 1 || input.slots.length > 3) {
     throw new Error("Role limit exceeded: max 3 instances per user per battle.");
@@ -225,9 +239,130 @@ function updateSentiment(detail: RuntimeBattleDetail, action: ActionType) {
   };
 }
 
+function buildOutcome(detail: RuntimeBattleDetail): {
+  ended: boolean;
+  outcomeType?: OutcomeType;
+  winnerSide?: "A" | "B" | "NONE";
+} {
+  const scoreDiff = Math.abs(detail.battle.scoreA - detail.battle.scoreB);
+  if (detail.battle.heat >= 85 || scoreDiff >= 10 || Math.abs(detail.battle.swing) >= 20) {
+    return {
+      ended: true,
+      outcomeType: scoreDiff >= 10 || Math.abs(detail.battle.swing) >= 20 ? "LANDSLIDE" : "REVERSAL",
+      winnerSide:
+        detail.battle.scoreA === detail.battle.scoreB
+          ? "NONE"
+          : detail.battle.scoreA > detail.battle.scoreB
+            ? "A"
+            : "B"
+    };
+  }
+
+  if (detail.battle.phase >= 10) {
+    return {
+      ended: true,
+      outcomeType: "COOLDOWN",
+      winnerSide:
+        detail.battle.scoreA === detail.battle.scoreB
+          ? "NONE"
+          : detail.battle.scoreA > detail.battle.scoreB
+            ? "A"
+            : "B"
+    };
+  }
+
+  return { ended: false };
+}
+
+function finalizeBattle(
+  detail: RuntimeBattleDetail,
+  outcome: { outcomeType: OutcomeType; winnerSide: "A" | "B" | "NONE" }
+) {
+  const highlights = [...detail.messages]
+    .sort((left, right) => {
+      const leftImpact =
+        Math.abs(left.impact.deltaHeat) +
+        Math.abs(left.impact.deltaSwing) +
+        Math.abs(left.impact.deltaScoreA) +
+        Math.abs(left.impact.deltaScoreB);
+      const rightImpact =
+        Math.abs(right.impact.deltaHeat) +
+        Math.abs(right.impact.deltaSwing) +
+        Math.abs(right.impact.deltaScoreA) +
+        Math.abs(right.impact.deltaScoreB);
+      return rightImpact - leftImpact;
+    })
+    .slice(0, 3)
+    .map((message) => message.id);
+
+  const contributionByInstance = new Map<string, number>();
+  for (const message of detail.messages) {
+    const current = contributionByInstance.get(message.speakerInstanceId) ?? 0;
+    contributionByInstance.set(
+      message.speakerInstanceId,
+      current +
+        Math.abs(message.impact.deltaHeat) +
+        Math.abs(message.impact.deltaSwing) +
+        Math.abs(message.impact.deltaScoreA) +
+        Math.abs(message.impact.deltaScoreB)
+    );
+  }
+
+  const [mvpInstanceId] =
+    [...contributionByInstance.entries()].sort((left, right) => right[1] - left[1])[0] ?? [];
+
+  const summaryLead =
+    outcome.winnerSide === "NONE"
+      ? "双方打到最后仍然没有形成绝对胜负。"
+      : `${outcome.winnerSide} 方在关键节点建立了更稳定的优势。`;
+
+  const result: BattleResult = {
+    battleId: detail.battle.id,
+    topicId: detail.topic.id,
+    outcomeType: outcome.outcomeType,
+    winnerSide: outcome.winnerSide,
+    final: {
+      heat: detail.battle.heat,
+      swing: detail.battle.swing,
+      scoreA: detail.battle.scoreA,
+      scoreB: detail.battle.scoreB,
+      phase: detail.battle.phase
+    },
+    highlightMessageIds: highlights,
+    summaryText: `${summaryLead} 最终热度 ${detail.battle.heat}，风向 ${detail.battle.swing}，比分 ${detail.battle.scoreA}:${detail.battle.scoreB}。`,
+    createdAt: new Date().toISOString(),
+    ...(mvpInstanceId ? { mvpInstanceId } : {})
+  };
+
+  detail.result = result;
+  detail.battle.status = "ENDED";
+  detail.battle.updatedAt = result.createdAt;
+  return result;
+}
+
+export function finalizeBattleManually(battleId: string) {
+  const detail = runtimeStore[battleId];
+  if (!detail) return null;
+  if (detail.result) return detail.result;
+
+  const scoreDiff = Math.abs(detail.battle.scoreA - detail.battle.scoreB);
+  return finalizeBattle(detail, {
+    outcomeType: scoreDiff >= 8 ? "LANDSLIDE" : "COOLDOWN",
+    winnerSide:
+      detail.battle.scoreA === detail.battle.scoreB
+        ? "NONE"
+        : detail.battle.scoreA > detail.battle.scoreB
+          ? "A"
+          : "B"
+  });
+}
+
 export function applyAction(input: CreateActionInput) {
   const detail = runtimeStore[input.battleId];
   if (!detail) return null;
+  if (detail.battle.status === "ENDED") {
+    throw new Error("Battle already ended.");
+  }
 
   const instance = detail.instances.find((item) => item.id === input.usingInstanceId);
   if (!instance || instance.userId !== input.userId) {
@@ -294,8 +429,17 @@ export function applyAction(input: CreateActionInput) {
     };
   }
 
+  const outcome = buildOutcome(detail);
+  if (outcome.ended && outcome.outcomeType && outcome.winnerSide) {
+    finalizeBattle(detail, {
+      outcomeType: outcome.outcomeType,
+      winnerSide: outcome.winnerSide
+    });
+  }
+
   return {
     producedMessageId: messageId,
-    state: detail.battle
+    state: detail.battle,
+    result: detail.result
   };
 }

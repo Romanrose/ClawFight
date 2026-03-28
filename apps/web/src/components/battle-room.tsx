@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { MockBattleDetail } from "@clawfight/contracts";
 import { ActionDock } from "./action-dock";
@@ -104,9 +105,32 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
       }
 
       await refreshBattleDetail();
-      setStatus(`动作已触发：${action}`);
+      setStatus("动作已触发，战局数据已刷新");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "动作失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFinalize() {
+    setBusy(true);
+    setStatus("正在封盘结算...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/battles/${detail.battle.id}/finalize`, {
+        method: "POST"
+      });
+
+      if (!response.ok) {
+        const error = (await response.json()) as { error?: { message?: string } };
+        throw new Error(error.error?.message ?? "封盘失败");
+      }
+
+      await refreshBattleDetail();
+      setStatus("战局已经封盘，可以查看结果页");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "封盘失败");
     } finally {
       setBusy(false);
     }
@@ -116,8 +140,16 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
     <>
       <BattleHeader detail={detail} />
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
-        {status}
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 md:flex-row md:items-center md:justify-between">
+        <span>{status}</span>
+        {detail.result ? (
+          <Link
+            href={`/battles/${detail.battle.id}/result`}
+            className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-slate-100"
+          >
+            查看结果页
+          </Link>
+        ) : null}
       </div>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
@@ -127,6 +159,7 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
           busy={busy}
           onEnterBattle={handleEnterBattle}
           onActionSubmit={handleActionSubmit}
+          onFinalize={handleFinalize}
         />
       </section>
     </>

@@ -1,6 +1,16 @@
 import cors from "cors";
 import express from "express";
-import { enterBattle, getBattleDetail, getBattleMessages, getBattleSentiment, getBattleState, listTopics, applyAction } from "./store.js";
+import {
+  applyAction,
+  enterBattle,
+  finalizeBattleManually,
+  getBattleDetail,
+  getBattleMessages,
+  getBattleResult,
+  getBattleSentiment,
+  getBattleState,
+  listTopics
+} from "./store.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -103,6 +113,21 @@ app.get("/battles/:battleId/detail", (request, response) => {
   response.json(detail);
 });
 
+app.get("/battles/:battleId/result", (request, response) => {
+  const result = getBattleResult(request.params.battleId);
+  if (!result) {
+    response.status(404).json({
+      error: {
+        code: "CF_NOT_FOUND",
+        message: "Battle result not found."
+      }
+    });
+    return;
+  }
+
+  response.json(result);
+});
+
 app.post("/battles/:battleId/openclaw/enter", (request, response) => {
   try {
     const result = enterBattle({
@@ -162,6 +187,21 @@ app.post("/battles/:battleId/actions", (request, response) => {
       }
     });
   }
+});
+
+app.post("/battles/:battleId/finalize", (request, response) => {
+  const result = finalizeBattleManually(request.params.battleId);
+  if (!result) {
+    response.status(404).json({
+      error: {
+        code: "CF_NOT_FOUND",
+        message: "Battle not found."
+      }
+    });
+    return;
+  }
+
+  response.json(result);
 });
 
 app.listen(port, () => {
