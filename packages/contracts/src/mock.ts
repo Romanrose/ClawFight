@@ -27,6 +27,7 @@ export type MockBattleDetail = {
   messages: BattleMessage[];
   loadout: LoadoutCard[];
   availableCharacters: MockCharacterCard[];
+  sentimentHistory?: SentimentSnapshot[];
   result?: BattleResult;
 };
 

@@ -122,8 +122,8 @@ app.get("/battles/:battleId/messages", (request, response) => {
 });
 
 app.get("/battles/:battleId/sentiment", (request, response) => {
-  const latest = getBattleSentiment(request.params.battleId);
-  if (!latest) {
+  const sentiment = getBattleSentiment(request.params.battleId);
+  if (!sentiment) {
     response.status(404).json({
       error: {
         code: "CF_NOT_FOUND",
@@ -134,8 +134,8 @@ app.get("/battles/:battleId/sentiment", (request, response) => {
   }
 
   response.json({
-    latest,
-    history: [latest]
+    latest: sentiment.latest,
+    history: sentiment.history
   });
 });
 

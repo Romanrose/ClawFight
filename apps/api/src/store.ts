@@ -55,6 +55,7 @@ type RuntimeInstance = {
 type RuntimeBattleDetail = MockBattleDetail & {
   instances: RuntimeInstance[];
   currentUserId: string;
+  sentimentHistory: NonNullable<MockBattleDetail["sentimentHistory"]>;
 };
 
 type RuntimeStore = Record<string, RuntimeBattleDetail>;
@@ -161,6 +162,9 @@ function buildRuntimeStore() {
       {
         ...cloned,
         availableCharacters: deepClone(mockCharacterCatalog),
+        sentimentHistory: cloned.sentimentHistory
+          ? deepClone(cloned.sentimentHistory)
+          : [deepClone(cloned.battle.sentiment)],
         instances,
         currentUserId
       }
@@ -168,6 +172,22 @@ function buildRuntimeStore() {
   });
 
   return Object.fromEntries(entries) as RuntimeStore;
+}
+
+function hydrateRuntimeStore(store: RuntimeStore): RuntimeStore {
+  return Object.fromEntries(
+    Object.entries(store).map(([battleId, detail]) => [
+      battleId,
+      {
+        ...detail,
+        availableCharacters: detail.availableCharacters ?? deepClone(mockCharacterCatalog),
+        sentimentHistory:
+          detail.sentimentHistory && detail.sentimentHistory.length > 0
+            ? detail.sentimentHistory
+            : [deepClone(detail.battle.sentiment)]
+      }
+    ])
+  ) as RuntimeStore;
 }
 
 let runtimeStore: RuntimeStore = buildRuntimeStore();
@@ -211,6 +231,7 @@ function toPublicDetail(detail: RuntimeBattleDetail): MockBattleDetail {
     messages: detail.messages,
     loadout: buildLoadoutCards(detail),
     availableCharacters: detail.availableCharacters,
+    sentimentHistory: detail.sentimentHistory,
     ...(detail.result ? { result: detail.result } : {})
   };
 }
@@ -240,7 +261,12 @@ export function getBattleMessages(battleId: string) {
 }
 
 export function getBattleSentiment(battleId: string) {
-  return runtimeStore[battleId]?.battle.sentiment ?? null;
+  const detail = runtimeStore[battleId];
+  if (!detail) return null;
+  return {
+    latest: detail.battle.sentiment,
+    history: detail.sentimentHistory
+  };
 }
 
 export function getBattleResult(battleId: string) {
@@ -268,7 +294,7 @@ export async function initializeBattleStore() {
     return;
   }
 
-  runtimeStore = persisted.runtimeStore;
+  runtimeStore = hydrateRuntimeStore(persisted.runtimeStore);
   instanceCounter = persisted.instanceCounter;
   messageCounter = persisted.messageCounter;
 }
@@ -373,6 +399,11 @@ function updateSentiment(detail: RuntimeBattleDetail, action: ActionType) {
     atPhase: detail.battle.phase,
     updatedAt: new Date().toISOString()
   };
+
+  detail.sentimentHistory = [
+    ...detail.sentimentHistory,
+    deepClone(detail.battle.sentiment)
+  ].slice(-12);
 }
 
 function buildOutcome(detail: RuntimeBattleDetail): {

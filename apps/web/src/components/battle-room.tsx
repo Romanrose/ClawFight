@@ -6,6 +6,7 @@ import type { BattleResult, MockBattleDetail } from "@clawfight/contracts";
 import { io, type Socket } from "socket.io-client";
 import { ActionDock } from "./action-dock";
 import { BattleHeader } from "./battle-header";
+import { SentimentTrend } from "./sentiment-trend";
 import { BattleTimeline } from "./battle-timeline";
 
 type BattleRoomProps = {
@@ -194,6 +195,8 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
           </Link>
         ) : null}
       </div>
+
+      <SentimentTrend history={detail.sentimentHistory ?? [detail.battle.sentiment]} />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
         <BattleTimeline detail={detail} />

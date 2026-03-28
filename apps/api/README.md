@@ -12,6 +12,7 @@ Current scaffold:
 - `GET /battles/:battleId/detail`
 - `POST /battles/:battleId/advance`
 - Background auto-advance loop for active battles
+- Rolling sentiment snapshot history per battle
 
 Useful commands from repo root:
 
