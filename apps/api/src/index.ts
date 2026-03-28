@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import { createServer } from "node:http";
+import { Server as SocketIOServer } from "socket.io";
 import {
   applyAction,
   enterBattle,
@@ -9,14 +11,48 @@ import {
   getBattleResult,
   getBattleSentiment,
   getBattleState,
-  listTopics
+  listTopics,
+  subscribeToBattleEvents
 } from "./store.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "*"
+  }
+});
 
 app.use(cors());
 app.use(express.json());
+
+io.on("connection", (socket) => {
+  socket.on("battle:join", (battleId: string) => {
+    socket.join(`battle:${battleId}`);
+
+    const detail = getBattleDetail(battleId);
+    if (detail) {
+      socket.emit("battle:detail", detail);
+      if (detail.result) {
+        socket.emit("battle:result", detail.result);
+      }
+    }
+  });
+
+  socket.on("battle:leave", (battleId: string) => {
+    socket.leave(`battle:${battleId}`);
+  });
+});
+
+subscribeToBattleEvents((event) => {
+  if (event.type === "battle:detail") {
+    io.to(`battle:${event.battleId}`).emit("battle:detail", event.detail);
+    return;
+  }
+
+  io.to(`battle:${event.battleId}`).emit("battle:result", event.result);
+});
 
 app.get("/health", (_request, response) => {
   response.json({
@@ -204,6 +240,6 @@ app.post("/battles/:battleId/finalize", (request, response) => {
   response.json(result);
 });
 
-app.listen(port, () => {
+httpServer.listen(port, () => {
   console.log(`ClawFight API listening on http://localhost:${port}`);
 });

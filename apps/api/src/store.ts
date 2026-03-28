@@ -13,6 +13,12 @@ import {
   type MockBattleDetail
 } from "@clawfight/contracts";
 
+type BattleEvent =
+  | { type: "battle:detail"; battleId: string; detail: MockBattleDetail }
+  | { type: "battle:result"; battleId: string; result: BattleResult };
+
+type BattleEventListener = (event: BattleEvent) => void;
+
 type EnterBattleInput = {
   battleId: string;
   userId: string;
@@ -47,6 +53,7 @@ type RuntimeBattleDetail = MockBattleDetail & {
 const currentUserId = "user_demo";
 let instanceCounter = 100;
 let messageCounter = 2000;
+const battleEventListeners = new Set<BattleEventListener>();
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -64,6 +71,12 @@ function cooldownLabel(turns: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function emitBattleEvent(event: BattleEvent) {
+  for (const listener of battleEventListeners) {
+    listener(event);
+  }
 }
 
 function normalizeSentiment(positive: number, neutral: number, negative: number) {
@@ -170,6 +183,13 @@ export function getBattleResult(battleId: string) {
   return runtimeStore[battleId]?.result ?? null;
 }
 
+export function subscribeToBattleEvents(listener: BattleEventListener) {
+  battleEventListeners.add(listener);
+  return () => {
+    battleEventListeners.delete(listener);
+  };
+}
+
 export function enterBattle(input: EnterBattleInput) {
   const detail = runtimeStore[input.battleId];
   if (!detail) return null;
@@ -203,6 +223,11 @@ export function enterBattle(input: EnterBattleInput) {
 
   detail.instances = instances;
   detail.loadout = buildLoadoutCards(detail);
+  emitBattleEvent({
+    type: "battle:detail",
+    battleId: input.battleId,
+    detail: toPublicDetail(detail)
+  });
 
   return {
     loadout: detail.loadout,
@@ -337,6 +362,16 @@ function finalizeBattle(
   detail.result = result;
   detail.battle.status = "ENDED";
   detail.battle.updatedAt = result.createdAt;
+  emitBattleEvent({
+    type: "battle:detail",
+    battleId: detail.battle.id,
+    detail: toPublicDetail(detail)
+  });
+  emitBattleEvent({
+    type: "battle:result",
+    battleId: detail.battle.id,
+    result
+  });
   return result;
 }
 
@@ -434,6 +469,12 @@ export function applyAction(input: CreateActionInput) {
     finalizeBattle(detail, {
       outcomeType: outcome.outcomeType,
       winnerSide: outcome.winnerSide
+    });
+  } else {
+    emitBattleEvent({
+      type: "battle:detail",
+      battleId: input.battleId,
+      detail: toPublicDetail(detail)
     });
   }
 

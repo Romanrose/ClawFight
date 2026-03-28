@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import type { MockBattleDetail } from "@clawfight/contracts";
+import { useEffect, useMemo, useState } from "react";
+import type { BattleResult, MockBattleDetail } from "@clawfight/contracts";
+import { io, type Socket } from "socket.io-client";
 import { ActionDock } from "./action-dock";
 import { BattleHeader } from "./battle-header";
 import { BattleTimeline } from "./battle-timeline";
@@ -18,6 +19,7 @@ type EnterBattlePayload = {
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.API_BASE_URL ?? "http://localhost:3001";
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? API_BASE_URL;
 
 export function BattleRoom({ initialDetail }: BattleRoomProps) {
   const [detail, setDetail] = useState(initialDetail);
@@ -31,6 +33,44 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
     () => detail.availableCharacters.slice(0, 3).map((item) => item.id),
     [detail.availableCharacters]
   );
+
+  useEffect(() => {
+    const socket: Socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"]
+    });
+
+    socket.on("connect", () => {
+      socket.emit("battle:join", initialDetail.battle.id);
+    });
+
+    socket.on("battle:detail", (payload: MockBattleDetail) => {
+      setDetail(payload);
+      setStatus((current) =>
+        current.startsWith("正在") ? "已收到实时战局更新" : current
+      );
+    });
+
+    socket.on("battle:result", (payload: BattleResult) => {
+      setDetail((current) => ({
+        ...current,
+        battle: {
+          ...current.battle,
+          status: "ENDED"
+        },
+        result: payload
+      }));
+      setStatus("战局已封盘，可以查看结果页");
+    });
+
+    socket.on("connect_error", () => {
+      setStatus("实时连接失败，当前使用请求刷新回退");
+    });
+
+    return () => {
+      socket.emit("battle:leave", initialDetail.battle.id);
+      socket.close();
+    };
+  }, [initialDetail.battle.id]);
 
   async function refreshBattleDetail() {
     const response = await fetch(`${API_BASE_URL}/battles/${detail.battle.id}/detail`, {
