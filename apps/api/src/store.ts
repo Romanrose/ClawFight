@@ -12,6 +12,7 @@ import {
   type LoadoutCard,
   type MockBattleDetail
 } from "@clawfight/contracts";
+import { loadPersistedState, savePersistedState, type PersistedState } from "./persistence.js";
 
 type BattleEvent =
   | { type: "battle:detail"; battleId: string; detail: MockBattleDetail }
@@ -50,6 +51,8 @@ type RuntimeBattleDetail = MockBattleDetail & {
   currentUserId: string;
 };
 
+type RuntimeStore = Record<string, RuntimeBattleDetail>;
+
 const currentUserId = "user_demo";
 let instanceCounter = 100;
 let messageCounter = 2000;
@@ -77,6 +80,16 @@ function emitBattleEvent(event: BattleEvent) {
   for (const listener of battleEventListeners) {
     listener(event);
   }
+}
+
+async function persistRuntimeStore() {
+  const state: PersistedState<RuntimeStore> = {
+    runtimeStore,
+    instanceCounter,
+    messageCounter
+  };
+
+  await savePersistedState(state);
 }
 
 function normalizeSentiment(positive: number, neutral: number, negative: number) {
@@ -114,10 +127,10 @@ function buildRuntimeStore() {
     ] as const;
   });
 
-  return Object.fromEntries(entries) as Record<string, RuntimeBattleDetail>;
+  return Object.fromEntries(entries) as RuntimeStore;
 }
 
-const runtimeStore = buildRuntimeStore();
+let runtimeStore: RuntimeStore = buildRuntimeStore();
 
 const actionImpactTable: Record<ActionType, { heat: number; swing: number; score: number }> = {
   SPRAY: { heat: 8, swing: 4, score: 2 },
@@ -190,7 +203,20 @@ export function subscribeToBattleEvents(listener: BattleEventListener) {
   };
 }
 
-export function enterBattle(input: EnterBattleInput) {
+export async function initializeBattleStore() {
+  const persisted = await loadPersistedState<RuntimeStore>();
+
+  if (!persisted) {
+    await persistRuntimeStore();
+    return;
+  }
+
+  runtimeStore = persisted.runtimeStore;
+  instanceCounter = persisted.instanceCounter;
+  messageCounter = persisted.messageCounter;
+}
+
+export async function enterBattle(input: EnterBattleInput) {
   const detail = runtimeStore[input.battleId];
   if (!detail) return null;
   if (detail.battle.status === "ENDED") {
@@ -223,6 +249,7 @@ export function enterBattle(input: EnterBattleInput) {
 
   detail.instances = instances;
   detail.loadout = buildLoadoutCards(detail);
+  await persistRuntimeStore();
   emitBattleEvent({
     type: "battle:detail",
     battleId: input.battleId,
@@ -299,7 +326,7 @@ function buildOutcome(detail: RuntimeBattleDetail): {
   return { ended: false };
 }
 
-function finalizeBattle(
+async function finalizeBattle(
   detail: RuntimeBattleDetail,
   outcome: { outcomeType: OutcomeType; winnerSide: "A" | "B" | "NONE" }
 ) {
@@ -362,6 +389,7 @@ function finalizeBattle(
   detail.result = result;
   detail.battle.status = "ENDED";
   detail.battle.updatedAt = result.createdAt;
+  await persistRuntimeStore();
   emitBattleEvent({
     type: "battle:detail",
     battleId: detail.battle.id,
@@ -375,13 +403,13 @@ function finalizeBattle(
   return result;
 }
 
-export function finalizeBattleManually(battleId: string) {
+export async function finalizeBattleManually(battleId: string) {
   const detail = runtimeStore[battleId];
   if (!detail) return null;
   if (detail.result) return detail.result;
 
   const scoreDiff = Math.abs(detail.battle.scoreA - detail.battle.scoreB);
-  return finalizeBattle(detail, {
+  return await finalizeBattle(detail, {
     outcomeType: scoreDiff >= 8 ? "LANDSLIDE" : "COOLDOWN",
     winnerSide:
       detail.battle.scoreA === detail.battle.scoreB
@@ -392,7 +420,7 @@ export function finalizeBattleManually(battleId: string) {
   });
 }
 
-export function applyAction(input: CreateActionInput) {
+export async function applyAction(input: CreateActionInput) {
   const detail = runtimeStore[input.battleId];
   if (!detail) return null;
   if (detail.battle.status === "ENDED") {
@@ -466,11 +494,12 @@ export function applyAction(input: CreateActionInput) {
 
   const outcome = buildOutcome(detail);
   if (outcome.ended && outcome.outcomeType && outcome.winnerSide) {
-    finalizeBattle(detail, {
+    await finalizeBattle(detail, {
       outcomeType: outcome.outcomeType,
       winnerSide: outcome.winnerSide
     });
   } else {
+    await persistRuntimeStore();
     emitBattleEvent({
       type: "battle:detail",
       battleId: input.battleId,

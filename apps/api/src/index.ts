@@ -11,6 +11,7 @@ import {
   getBattleResult,
   getBattleSentiment,
   getBattleState,
+  initializeBattleStore,
   listTopics,
   subscribeToBattleEvents
 } from "./store.js";
@@ -164,9 +165,9 @@ app.get("/battles/:battleId/result", (request, response) => {
   response.json(result);
 });
 
-app.post("/battles/:battleId/openclaw/enter", (request, response) => {
+app.post("/battles/:battleId/openclaw/enter", async (request, response) => {
   try {
-    const result = enterBattle({
+    const result = await enterBattle({
       battleId: request.params.battleId,
       userId: request.body.userId,
       side: request.body.side,
@@ -194,9 +195,9 @@ app.post("/battles/:battleId/openclaw/enter", (request, response) => {
   }
 });
 
-app.post("/battles/:battleId/actions", (request, response) => {
+app.post("/battles/:battleId/actions", async (request, response) => {
   try {
-    const result = applyAction({
+    const result = await applyAction({
       battleId: request.params.battleId,
       userId: request.body.userId,
       usingInstanceId: request.body.usingInstanceId,
@@ -225,8 +226,8 @@ app.post("/battles/:battleId/actions", (request, response) => {
   }
 });
 
-app.post("/battles/:battleId/finalize", (request, response) => {
-  const result = finalizeBattleManually(request.params.battleId);
+app.post("/battles/:battleId/finalize", async (request, response) => {
+  const result = await finalizeBattleManually(request.params.battleId);
   if (!result) {
     response.status(404).json({
       error: {
@@ -239,6 +240,8 @@ app.post("/battles/:battleId/finalize", (request, response) => {
 
   response.json(result);
 });
+
+await initializeBattleStore();
 
 httpServer.listen(port, () => {
   console.log(`ClawFight API listening on http://localhost:${port}`);

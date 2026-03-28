@@ -12,3 +12,4 @@ coverage
 
 generated
 prisma/generated
+apps/api/data/runtime-store.json
