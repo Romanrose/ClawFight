@@ -31,4 +31,7 @@ Runtime notes:
 - Auto-advance is enabled by default
 - Tune with `AUTO_ADVANCE_ENABLED` and `AUTO_ADVANCE_INTERVAL_MS`
 - Message generation provider defaults to `template`
-- Switch with `GENERATION_PROVIDER=template|mock-llm`
+- Switch with `GENERATION_PROVIDER=template|mock-llm|openai-compatible`
+- OpenAI-compatible mode reads `GENERATION_BASE_URL`, `GENERATION_MODEL`, and `GENERATION_API_KEY`
+- Do not commit real API keys; keep them in local env only
+- For DashScope Coding compatibility, `qwen3-coder-plus` is a verified working model

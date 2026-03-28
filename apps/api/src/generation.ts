@@ -39,6 +39,12 @@ export interface BattleMessageGenerator {
   generateSummary(input: SummaryInput): Promise<string>;
 }
 
+type OpenAICompatibleConfig = {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+};
+
 class TemplateMessageGenerator implements BattleMessageGenerator {
   readonly name: string = "template";
 
@@ -109,11 +115,140 @@ class MockLlmMessageGenerator extends TemplateMessageGenerator {
   }
 }
 
+class OpenAICompatibleMessageGenerator implements BattleMessageGenerator {
+  readonly name = "openai-compatible";
+
+  constructor(private readonly config: OpenAICompatibleConfig) {}
+
+  async generateUserMessage(input: UserMessageInput) {
+    return await this.complete({
+      system:
+        "你在为一个娱乐化、多角色实时对战平台生成中文短消息。输出一句自然、像角色在现场说的话，不要解释规则。",
+      user: [
+        `角色名：${input.speakerName}`,
+        `角色人设：${input.speakerPersona}`,
+        `动作：${actionLabels[input.action]}`,
+        input.instruction?.trim() ? `用户指令：${input.instruction.trim()}` : "用户指令：无",
+        "要求：20-45字，中文，保留角色风格，不要使用引号包裹整句。"
+      ].join("\n")
+    });
+  }
+
+  async generateSystemMessage(input: SystemMessageInput) {
+    return await this.complete({
+      system:
+        "你在为一个娱乐化、多角色实时对战平台生成系统自动发言。输出一句中文短消息，要像观众正在围观的实时对线内容。",
+      user: [
+        `议题：${input.topic.title}`,
+        `A方：${input.topic.sideAName}`,
+        `B方：${input.topic.sideBName}`,
+        `角色名：${input.speakerName}`,
+        `角色人设：${input.speakerPersona}`,
+        `角色阵营：${input.side}`,
+        `动作：${actionLabels[input.action]}`,
+        `触发来源：${input.source}`,
+        "要求：20-50字，像角色发言，不要解释规则，不要使用 Markdown。"
+      ].join("\n")
+    });
+  }
+
+  async generateSummary(input: SummaryInput) {
+    return await this.complete({
+      system:
+        "你在为一个娱乐化议题战局生成中文结案摘要。输出一段简短总结，适合直接展示在结果页。",
+      user: [
+        `议题：${input.topic.title}`,
+        `A方：${input.topic.sideAName}`,
+        `B方：${input.topic.sideBName}`,
+        `结局类型：${input.outcomeType}`,
+        `胜方：${input.winnerSide}`,
+        `最终热度：${input.heat}`,
+        `最终风向：${input.swing}`,
+        `最终比分：${input.scoreA}:${input.scoreB}`,
+        "要求：40-90字，中文，自然、总结性强，不要列表。"
+      ].join("\n")
+    });
+  }
+
+  private async complete(input: { system: string; user: string }) {
+    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.config.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        temperature: 0.8,
+        messages: [
+          {
+            role: "system",
+            content: input.system
+          },
+          {
+            role: "user",
+            content: input.user
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Generation request failed: ${response.status} ${body}`);
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; text?: string }>;
+        };
+      }>;
+    };
+
+    const content = payload.choices?.[0]?.message?.content;
+    if (typeof content === "string" && content.trim()) {
+      return content.trim();
+    }
+
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) => (typeof part?.text === "string" ? part.text : ""))
+        .join("")
+        .trim();
+      if (text) {
+        return text;
+      }
+    }
+
+    throw new Error("Generation response did not include message content.");
+  }
+}
+
 export function createBattleMessageGenerator(): BattleMessageGenerator {
   const provider = process.env.GENERATION_PROVIDER ?? "template";
 
   if (provider === "mock-llm") {
     return new MockLlmMessageGenerator();
+  }
+
+  if (provider === "openai-compatible") {
+    const baseUrl = process.env.GENERATION_BASE_URL ?? process.env.OPENAI_BASE_URL;
+    const model = process.env.GENERATION_MODEL ?? process.env.OPENAI_MODEL;
+    const apiKey = process.env.GENERATION_API_KEY ?? process.env.OPENAI_API_KEY;
+
+    if (!baseUrl || !model || !apiKey) {
+      console.warn(
+        "[generation] Missing GENERATION_BASE_URL / GENERATION_MODEL / GENERATION_API_KEY, falling back to template provider."
+      );
+      return new TemplateMessageGenerator();
+    }
+
+    return new OpenAICompatibleMessageGenerator({
+      baseUrl: baseUrl.replace(/\/$/, ""),
+      model,
+      apiKey
+    });
   }
 
   return new TemplateMessageGenerator();
