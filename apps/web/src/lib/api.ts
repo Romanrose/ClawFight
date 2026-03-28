@@ -5,7 +5,8 @@ import {
   type TopicLiveCard
 } from "@clawfight/contracts";
 
-const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:3001";
+const API_BASE_URL =
+  process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 
 async function readJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {

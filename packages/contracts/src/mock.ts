@@ -25,7 +25,61 @@ export type MockBattleDetail = {
   battle: BattleState;
   messages: BattleMessage[];
   loadout: LoadoutCard[];
+  availableCharacters: MockCharacterCard[];
 };
+
+export type MockCharacterCard = {
+  id: string;
+  name: string;
+  persona: string;
+  side: "A" | "B" | "NEUTRAL";
+  recommendedAction: BattleMessage["action"];
+};
+
+export const mockCharacterCatalog: MockCharacterCard[] = [
+  {
+    id: "claw_followup",
+    name: "补刀龙虾",
+    persona: "追着对面逻辑漏洞打，适合扩大已经建立的优势。",
+    side: "A",
+    recommendedAction: "FOLLOW_UP"
+  },
+  {
+    id: "claw_whitewash",
+    name: "洗白龙虾",
+    persona: "擅长把负面节点重新包装成止损动作。",
+    side: "A",
+    recommendedAction: "WHITEWASH"
+  },
+  {
+    id: "claw_summary",
+    name: "总结龙虾",
+    persona: "负责收束叙事，在封盘前压住节奏。",
+    side: "A",
+    recommendedAction: "SUMMARIZE"
+  },
+  {
+    id: "claw_sarcasm",
+    name: "阴阳龙虾",
+    persona: "把对方破绽放大成人群记忆点。",
+    side: "B",
+    recommendedAction: "SARCASM"
+  },
+  {
+    id: "claw_expose",
+    name: "爆料龙虾",
+    persona: "风险高但收益大，适合争取反转节点。",
+    side: "B",
+    recommendedAction: "EXPOSE"
+  },
+  {
+    id: "claw_analyze",
+    name: "理中客龙虾",
+    persona: "降温但提升可信度，适合稳住摇摆观众。",
+    side: "NEUTRAL",
+    recommendedAction: "ANALYZE"
+  }
+];
 
 const sentimentA: SentimentSnapshot = {
   battleId: "battle_901",
@@ -257,7 +311,8 @@ export const mockBattleDetailsById: Record<string, MockBattleDetail> = {
               persona: "负责收束叙事，在封盘前压住节奏。",
               cooldown: "冷却 1 phase"
             }
-          ]
+          ],
+          availableCharacters: mockCharacterCatalog
         }
       }
     : {}),
@@ -280,7 +335,8 @@ export const mockBattleDetailsById: Record<string, MockBattleDetail> = {
               persona: "把对方破绽放大成人群记忆点。",
               cooldown: "冷却 12s"
             }
-          ]
+          ],
+          availableCharacters: mockCharacterCatalog
         }
       }
     : {})

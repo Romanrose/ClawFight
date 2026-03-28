@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ActionDock } from "@/components/action-dock";
-import { BattleHeader } from "@/components/battle-header";
-import { BattleTimeline } from "@/components/battle-timeline";
+import { BattleRoom } from "@/components/battle-room";
 import { getBattleDetail } from "@/lib/api";
 
 type BattlePageProps = {
@@ -33,12 +31,7 @@ export default async function BattlePage({ params }: BattlePageProps) {
         </div>
       </div>
 
-      <BattleHeader detail={detail} />
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
-        <BattleTimeline detail={detail} />
-        <ActionDock detail={detail} />
-      </section>
+      <BattleRoom initialDetail={detail} />
     </main>
   );
 }

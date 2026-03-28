@@ -1,0 +1,134 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { MockBattleDetail } from "@clawfight/contracts";
+import { ActionDock } from "./action-dock";
+import { BattleHeader } from "./battle-header";
+import { BattleTimeline } from "./battle-timeline";
+
+type BattleRoomProps = {
+  initialDetail: MockBattleDetail;
+};
+
+type EnterBattlePayload = {
+  side: "A" | "B" | "NEUTRAL";
+  slots: string[];
+};
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.API_BASE_URL ?? "http://localhost:3001";
+
+export function BattleRoom({ initialDetail }: BattleRoomProps) {
+  const [detail, setDetail] = useState(initialDetail);
+  const [status, setStatus] = useState<string>("已连接到战局");
+  const [busy, setBusy] = useState(false);
+
+  const currentUserId = "user_demo";
+  const selectedInstanceId = detail.loadout[0]?.id;
+
+  const availableDefaultSlots = useMemo(
+    () => detail.availableCharacters.slice(0, 3).map((item) => item.id),
+    [detail.availableCharacters]
+  );
+
+  async function refreshBattleDetail() {
+    const response = await fetch(`${API_BASE_URL}/battles/${detail.battle.id}/detail`, {
+      method: "GET"
+    });
+
+    if (!response.ok) {
+      throw new Error("刷新战局失败");
+    }
+
+    const payload = (await response.json()) as MockBattleDetail;
+    setDetail(payload);
+  }
+
+  async function handleEnterBattle(payload?: EnterBattlePayload) {
+    setBusy(true);
+    setStatus("正在提交入场编队...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/battles/${detail.battle.id}/openclaw/enter`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          userId: currentUserId,
+          side: payload?.side ?? "A",
+          slots: (payload?.slots ?? availableDefaultSlots).map((characterId) => ({ characterId }))
+        })
+      });
+
+      if (!response.ok) {
+        const error = (await response.json()) as { error?: { message?: string } };
+        throw new Error(error.error?.message ?? "入场失败");
+      }
+
+      await refreshBattleDetail();
+      setStatus("入场成功，编队已更新");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "入场失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleActionSubmit(action: string, instruction: string) {
+    if (!selectedInstanceId) {
+      setStatus("当前没有可操作的龙虾");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("正在触发动作...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/battles/${detail.battle.id}/actions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          userId: currentUserId,
+          usingInstanceId: selectedInstanceId,
+          action,
+          instruction
+        })
+      });
+
+      if (!response.ok) {
+        const error = (await response.json()) as { error?: { message?: string } };
+        throw new Error(error.error?.message ?? "动作失败");
+      }
+
+      await refreshBattleDetail();
+      setStatus(`动作已触发：${action}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "动作失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <BattleHeader detail={detail} />
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+        {status}
+      </div>
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
+        <BattleTimeline detail={detail} />
+        <ActionDock
+          detail={detail}
+          busy={busy}
+          onEnterBattle={handleEnterBattle}
+          onActionSubmit={handleActionSubmit}
+        />
+      </section>
+    </>
+  );
+}
