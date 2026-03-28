@@ -1,0 +1,8 @@
+{
+  "name": "@clawfight/api",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Scaffold Express app next\"",
+    "typecheck": "echo \"Add tsconfig and source files next\""
+  }
+}

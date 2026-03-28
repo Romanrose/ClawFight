@@ -1,0 +1,645 @@
+openapi: 3.1.0
+info:
+  title: ClawFight API
+  version: 0.1.0
+  description: |
+    Draft API contract for the ClawFight MVP.
+servers:
+  - url: http://localhost:3001
+tags:
+  - name: Topics
+  - name: Battles
+  - name: Sentiment
+  - name: Results
+paths:
+  /topics:
+    get:
+      tags: [Topics]
+      summary: List topics with live battle overview
+      operationId: listTopics
+      responses:
+        "200":
+          description: Topic list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TopicLiveCard"
+                  nextCursor:
+                    type: string
+                    nullable: true
+  /topics/{topicId}/battles:
+    post:
+      tags: [Topics]
+      summary: Create or reset the active battle for a topic
+      operationId: createBattle
+      parameters:
+        - $ref: "#/components/parameters/TopicId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBattleRequest"
+      responses:
+        "201":
+          description: Active battle created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /battles/{battleId}:
+    get:
+      tags: [Battles]
+      summary: Fetch battle state
+      operationId: getBattle
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+      responses:
+        "200":
+          description: Current battle state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /battles/{battleId}/openclaw/enter:
+    post:
+      tags: [Battles]
+      summary: Join a battle with up to three characters
+      operationId: enterBattle
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterBattleRequest"
+      responses:
+        "200":
+          description: Loadout accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnterBattleResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /battles/{battleId}/actions:
+    post:
+      tags: [Battles]
+      summary: Trigger a user-controlled action
+      operationId: createAction
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActionRequest"
+      responses:
+        "200":
+          description: Action processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateActionResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+  /battles/{battleId}/messages:
+    get:
+      tags: [Battles]
+      summary: List battle messages
+      operationId: listBattleMessages
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Paginated message list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BattleMessage"
+                  nextCursor:
+                    type: string
+                    nullable: true
+  /battles/{battleId}/advance:
+    post:
+      tags: [Battles]
+      summary: Advance the battle for testing or ops
+      operationId: advanceBattle
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                steps:
+                  type: integer
+                  minimum: 1
+                  default: 1
+      responses:
+        "200":
+          description: Updated battle state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleState"
+  /battles/{battleId}/sentiment:
+    get:
+      tags: [Sentiment]
+      summary: Read latest sentiment snapshot and history
+      operationId: getBattleSentiment
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+        - name: window
+          in: query
+          schema:
+            type: string
+            example: lastN:50
+      responses:
+        "200":
+          description: Sentiment snapshots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [latest, history]
+                properties:
+                  latest:
+                    $ref: "#/components/schemas/SentimentSnapshot"
+                  history:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SentimentSnapshot"
+  /battles/{battleId}/result:
+    get:
+      tags: [Results]
+      summary: Read battle result after finalization
+      operationId: getBattleResult
+      parameters:
+        - $ref: "#/components/parameters/BattleId"
+      responses:
+        "200":
+          description: Final battle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BattleResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    TopicId:
+      name: topicId
+      in: path
+      required: true
+      schema:
+        type: string
+    BattleId:
+      name: battleId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: State conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Validation:
+      description: Business validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    Side:
+      type: string
+      enum: [A, B, NEUTRAL]
+    WinnerSide:
+      type: string
+      enum: [A, B, NONE]
+    BattleStatus:
+      type: string
+      enum: [ACTIVE, ENDED, PAUSED]
+    SentimentLabel:
+      type: string
+      enum: [POSITIVE, NEUTRAL, NEGATIVE]
+    OutcomeType:
+      type: string
+      enum: [LANDSLIDE, REVERSAL, STALEMATE, COOLDOWN]
+    ActionType:
+      type: string
+      enum:
+        - SPRAY
+        - SARCASM
+        - FOLLOW_UP
+        - WHITEWASH
+        - EXPOSE
+        - ANALYZE
+        - SUMMARIZE
+        - AMPLIFY
+        - DE_ESCALATE
+    TopicLiveCard:
+      type: object
+      required:
+        - id
+        - title
+        - sideAName
+        - sideBName
+        - tags
+        - live
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        sideAName:
+          type: string
+        sideBName:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        activeBattleId:
+          type: string
+          nullable: true
+        live:
+          type: object
+          required: [heat, swing, sentiment]
+          properties:
+            heat:
+              type: integer
+            swing:
+              type: integer
+            sentiment:
+              $ref: "#/components/schemas/SentimentDistribution"
+    SentimentDistribution:
+      type: object
+      required: [positive, neutral, negative]
+      properties:
+        positive:
+          type: number
+          format: float
+        neutral:
+          type: number
+          format: float
+        negative:
+          type: number
+          format: float
+    SentimentSnapshot:
+      type: object
+      required:
+        - battleId
+        - atPhase
+        - positive
+        - neutral
+        - negative
+        - sampleSize
+        - window
+        - updatedAt
+      properties:
+        battleId:
+          type: string
+        atPhase:
+          type: integer
+        positive:
+          type: number
+          format: float
+        neutral:
+          type: number
+          format: float
+        negative:
+          type: number
+          format: float
+        sampleSize:
+          type: integer
+        window:
+          type: object
+          required: [type, value]
+          properties:
+            type:
+              type: string
+              enum: [ALL, LAST_N, LAST_MINUTES]
+            value:
+              type: integer
+        updatedAt:
+          type: string
+          format: date-time
+    BattleState:
+      type: object
+      required:
+        - id
+        - topicId
+        - status
+        - phase
+        - heat
+        - swing
+        - scoreA
+        - scoreB
+        - sentiment
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        topicId:
+          type: string
+        status:
+          $ref: "#/components/schemas/BattleStatus"
+        phase:
+          type: integer
+        heat:
+          type: integer
+        swing:
+          type: integer
+        scoreA:
+          type: integer
+        scoreB:
+          type: integer
+        nextSpeakerHint:
+          type: string
+          nullable: true
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+        sentiment:
+          $ref: "#/components/schemas/SentimentSnapshot"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CharacterInstance:
+      type: object
+      required:
+        - id
+        - battleId
+        - characterId
+        - side
+        - status
+        - contributionScore
+        - joinedAt
+      properties:
+        id:
+          type: string
+        battleId:
+          type: string
+        characterId:
+          type: string
+        ownerUserId:
+          type: string
+          nullable: true
+        side:
+          $ref: "#/components/schemas/Side"
+        nickname:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ACTIVE, LEFT, MUTED]
+        cooldownUntil:
+          type: string
+          format: date-time
+          nullable: true
+        contributionScore:
+          type: number
+          format: float
+        joinedAt:
+          type: string
+          format: date-time
+    UserBattleLoadout:
+      type: object
+      required: [battleId, userId, side]
+      properties:
+        battleId:
+          type: string
+        userId:
+          type: string
+        side:
+          $ref: "#/components/schemas/Side"
+        slot1CharacterId:
+          type: string
+          nullable: true
+        slot2CharacterId:
+          type: string
+          nullable: true
+        slot3CharacterId:
+          type: string
+          nullable: true
+        lockedAt:
+          type: string
+          format: date-time
+          nullable: true
+    BattleMessageImpact:
+      type: object
+      required: [deltaHeat, deltaSwing, deltaScoreA, deltaScoreB]
+      properties:
+        deltaHeat:
+          type: integer
+        deltaSwing:
+          type: integer
+        deltaScoreA:
+          type: integer
+        deltaScoreB:
+          type: integer
+    BattleMessage:
+      type: object
+      required:
+        - id
+        - battleId
+        - topicId
+        - speakerInstanceId
+        - speakerName
+        - side
+        - action
+        - content
+        - impact
+        - userTriggered
+        - createdAt
+      properties:
+        id:
+          type: string
+        battleId:
+          type: string
+        topicId:
+          type: string
+        speakerInstanceId:
+          type: string
+        speakerName:
+          type: string
+        side:
+          $ref: "#/components/schemas/Side"
+        action:
+          $ref: "#/components/schemas/ActionType"
+        content:
+          type: string
+        targetInstanceId:
+          type: string
+          nullable: true
+        impact:
+          $ref: "#/components/schemas/BattleMessageImpact"
+        userTriggered:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    BattleResult:
+      type: object
+      required:
+        - battleId
+        - topicId
+        - outcomeType
+        - winnerSide
+        - final
+        - highlightMessageIds
+        - summaryText
+        - createdAt
+      properties:
+        battleId:
+          type: string
+        topicId:
+          type: string
+        outcomeType:
+          $ref: "#/components/schemas/OutcomeType"
+        winnerSide:
+          $ref: "#/components/schemas/WinnerSide"
+        final:
+          type: object
+          required: [heat, swing, scoreA, scoreB, phase]
+          properties:
+            heat:
+              type: integer
+            swing:
+              type: integer
+            scoreA:
+              type: integer
+            scoreB:
+              type: integer
+            phase:
+              type: integer
+        mvpInstanceId:
+          type: string
+          nullable: true
+        highlightMessageIds:
+          type: array
+          items:
+            type: string
+        summaryText:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateBattleRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          default: live
+        seed:
+          type: integer
+      required: [mode]
+    EnterBattleRequest:
+      type: object
+      required: [userId, side, slots]
+      properties:
+        userId:
+          type: string
+        side:
+          $ref: "#/components/schemas/Side"
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: object
+            required: [characterId]
+            properties:
+              characterId:
+                type: string
+    EnterBattleResponse:
+      type: object
+      required: [loadout, instances]
+      properties:
+        loadout:
+          $ref: "#/components/schemas/UserBattleLoadout"
+        instances:
+          type: array
+          items:
+            $ref: "#/components/schemas/CharacterInstance"
+    CreateActionRequest:
+      type: object
+      required: [userId, usingInstanceId, action]
+      properties:
+        userId:
+          type: string
+        usingInstanceId:
+          type: string
+        action:
+          $ref: "#/components/schemas/ActionType"
+        instruction:
+          type: string
+    CreateActionResponse:
+      type: object
+      required: [producedMessageId, state]
+      properties:
+        producedMessageId:
+          type: string
+        state:
+          $ref: "#/components/schemas/BattleState"

@@ -1,0 +1,16 @@
+{
+  "name": "clawfight",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @clawfight/web",
+    "build:web": "npm run build --workspace @clawfight/web",
+    "lint:web": "npm run lint --workspace @clawfight/web",
+    "check": "echo \"Workspace scaffolded. Install dependencies and wire app scripts next.\"",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma"
+  }
+}

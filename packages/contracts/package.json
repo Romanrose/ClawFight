@@ -1,0 +1,14 @@
+{
+  "name": "@clawfight/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/domain.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
