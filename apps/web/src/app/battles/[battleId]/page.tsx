@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ActionDock } from "@/components/action-dock";
 import { BattleHeader } from "@/components/battle-header";
 import { BattleTimeline } from "@/components/battle-timeline";
-import { mockBattleDetailsById } from "@/lib/mock-data";
+import { getBattleDetail } from "@/lib/api";
 
 type BattlePageProps = {
   params: Promise<{
@@ -13,7 +13,7 @@ type BattlePageProps = {
 
 export default async function BattlePage({ params }: BattlePageProps) {
   const { battleId } = await params;
-  const detail = mockBattleDetailsById[battleId];
+  const detail = await getBattleDetail(battleId);
 
   if (!detail) {
     notFound();

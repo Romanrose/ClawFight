@@ -1,8 +1,17 @@
 # API App
 
-Planned responsibilities:
+Current scaffold:
 
-- REST endpoints from `openapi/clawfight.openapi.yaml`
-- Socket.IO room broadcast per battle
-- Battle engine orchestration
-- Queue submission for LLM and sentiment workers
+- Express server with JSON and CORS enabled
+- `GET /health`
+- `GET /topics`
+- `GET /battles/:battleId`
+- `GET /battles/:battleId/messages`
+- `GET /battles/:battleId/sentiment`
+- `GET /battles/:battleId/detail`
+
+Useful commands from repo root:
+
+- `npm run dev:api`
+- `npm run typecheck:api`
+- `npm run build:api`

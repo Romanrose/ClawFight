@@ -8,8 +8,11 @@
   ],
   "scripts": {
     "dev:web": "npm run dev --workspace @clawfight/web",
+    "dev:api": "npm run dev --workspace @clawfight/api",
     "build:web": "npm run build --workspace @clawfight/web",
+    "build:api": "npm run build --workspace @clawfight/api",
     "lint:web": "npm run lint --workspace @clawfight/web",
+    "typecheck:api": "npm run typecheck --workspace @clawfight/api",
     "check": "echo \"Workspace scaffolded. Install dependencies and wire app scripts next.\"",
     "prisma:validate": "prisma validate --schema prisma/schema.prisma"
   }

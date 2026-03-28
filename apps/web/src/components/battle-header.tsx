@@ -1,4 +1,4 @@
-import type { MockBattleDetail } from "@/lib/mock-data";
+import type { MockBattleDetail } from "@clawfight/contracts";
 import { SentimentBar } from "./sentiment-bar";
 
 type BattleHeaderProps = {

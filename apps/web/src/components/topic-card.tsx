@@ -1,16 +1,9 @@
 import Link from "next/link";
-import type { SentimentSnapshot, Topic } from "@clawfight/contracts";
+import type { TopicLiveCard } from "@clawfight/contracts";
 import { SentimentBar } from "./sentiment-bar";
 
 type TopicCardProps = {
-  topic: Topic & {
-    activeBattleId: string;
-    live: {
-      heat: number;
-      swing: number;
-      sentiment: SentimentSnapshot;
-    };
-  };
+  topic: TopicLiveCard;
 };
 
 function getSwingCopy(swing: number, sideAName: string, sideBName: string) {

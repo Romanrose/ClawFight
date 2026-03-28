@@ -1,5 +1,5 @@
 import { actionLabels } from "@clawfight/contracts";
-import type { MockBattleDetail } from "@/lib/mock-data";
+import type { MockBattleDetail } from "@clawfight/contracts";
 
 type BattleTimelineProps = {
   detail: MockBattleDetail;

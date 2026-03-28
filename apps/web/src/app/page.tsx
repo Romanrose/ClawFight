@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { TopicCard } from "@/components/topic-card";
-import { mockTopics } from "@/lib/mock-data";
+import { getTopics } from "@/lib/api";
 
-export default function HomePage() {
-  const featuredTopic = mockTopics[0];
+export default async function HomePage() {
+  const topics = await getTopics();
+  const featuredTopic = topics[0];
 
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-10 px-6 py-10">
@@ -30,7 +31,7 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        {mockTopics.map((topic) => (
+        {topics.map((topic) => (
           <TopicCard key={topic.id} topic={topic} />
         ))}
       </section>

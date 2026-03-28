@@ -4,9 +4,9 @@ import type {
   CharacterInstance,
   SentimentSnapshot,
   Topic
-} from "@clawfight/contracts";
+} from "./domain";
 
-type TopicLiveCard = Topic & {
+export type TopicLiveCard = Topic & {
   activeBattleId: string;
   live: {
     heat: number;
@@ -15,7 +15,7 @@ type TopicLiveCard = Topic & {
   };
 };
 
-type LoadoutCard = Pick<CharacterInstance, "id" | "nickname"> & {
+export type LoadoutCard = Pick<CharacterInstance, "id" | "nickname"> & {
   persona: string;
   cooldown: string;
 };

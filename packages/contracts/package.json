@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/domain.ts"
+    ".": "./src/index.ts",
+    "./domain": "./src/domain.ts",
+    "./mock": "./src/mock.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
