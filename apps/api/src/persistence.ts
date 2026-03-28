@@ -34,7 +34,7 @@ export async function savePersistedState<TStore>(state: PersistedState<TStore>) 
   const storeFile = getStoreFilePath();
   await mkdir(dirname(storeFile), { recursive: true });
 
-  const tempFile = `${storeFile}.tmp`;
+  const tempFile = `${storeFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   await writeFile(tempFile, JSON.stringify(state, null, 2), "utf8");
   await rename(tempFile, storeFile);
 }

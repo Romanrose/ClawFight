@@ -41,6 +41,9 @@ export function ActionDock({
         <p className="mt-2 text-sm leading-6 text-slate-400">
           这一版已经接上 demo API，可以直接重新编队并触发动作。
         </p>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          不操作时系统也会按阶段自动补发言。
+        </p>
         <button
           type="button"
           disabled={busy || detail.battle.status === "ENDED"}

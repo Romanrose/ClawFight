@@ -35,6 +35,12 @@ type CreateActionInput = {
   instruction?: string;
 };
 
+type AdvanceBattleInput = {
+  battleId: string;
+  steps?: number;
+  source?: "manual" | "auto";
+};
+
 type RuntimeInstance = {
   id: string;
   userId: string;
@@ -57,6 +63,40 @@ const currentUserId = "user_demo";
 let instanceCounter = 100;
 let messageCounter = 2000;
 const battleEventListeners = new Set<BattleEventListener>();
+const systemSpeakerCatalog = {
+  A: [
+    {
+      id: "inst_sys_a_1",
+      name: "护主狂魔",
+      persona: "专门把有利点放大，替 A 方稳住场面。",
+      side: "A" as const,
+      preferredActions: ["WHITEWASH", "FOLLOW_UP", "SUMMARIZE"] satisfies ActionType[]
+    },
+    {
+      id: "inst_sys_a_2",
+      name: "理中客",
+      persona: "用更冷静的语气替 A 方补证据。",
+      side: "A" as const,
+      preferredActions: ["ANALYZE", "SUMMARIZE", "WHITEWASH"] satisfies ActionType[]
+    }
+  ],
+  B: [
+    {
+      id: "inst_sys_b_1",
+      name: "阴阳大师",
+      persona: "专门抓住破绽，替 B 方放大负面记忆点。",
+      side: "B" as const,
+      preferredActions: ["SARCASM", "FOLLOW_UP", "EXPOSE"] satisfies ActionType[]
+    },
+    {
+      id: "inst_sys_b_2",
+      name: "爆料王",
+      persona: "靠高风险节点争取 B 方反转空间。",
+      side: "B" as const,
+      preferredActions: ["EXPOSE", "SARCASM", "SPRAY"] satisfies ActionType[]
+    }
+  ]
+};
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -153,6 +193,17 @@ function buildLoadoutCards(detail: RuntimeBattleDetail): LoadoutCard[] {
   }));
 }
 
+function updateLiveTopic(detail: RuntimeBattleDetail) {
+  const liveTopic = mockTopics.find((topic) => topic.id === detail.topic.id);
+  if (liveTopic) {
+    liveTopic.live = {
+      heat: detail.battle.heat,
+      swing: detail.battle.swing,
+      sentiment: detail.battle.sentiment
+    };
+  }
+}
+
 function toPublicDetail(detail: RuntimeBattleDetail): MockBattleDetail {
   return {
     topic: detail.topic,
@@ -194,6 +245,12 @@ export function getBattleSentiment(battleId: string) {
 
 export function getBattleResult(battleId: string) {
   return runtimeStore[battleId]?.result ?? null;
+}
+
+export function getActiveBattleIds() {
+  return Object.values(runtimeStore)
+    .filter((detail) => detail.battle.status === "ACTIVE")
+    .map((detail) => detail.battle.id);
 }
 
 export function subscribeToBattleEvents(listener: BattleEventListener) {
@@ -270,6 +327,33 @@ function buildMessageContent(instance: RuntimeInstance, action: ActionType, inst
   return `${base} 继续把节奏往自己这边拉。`;
 }
 
+function buildAutoMessageContent(
+  speaker: { name: string; persona: string; side: "A" | "B" },
+  action: ActionType,
+  detail: RuntimeBattleDetail,
+  source: "manual" | "auto"
+) {
+  const sideName = speaker.side === "A" ? detail.topic.sideAName : detail.topic.sideBName;
+  const base = `${speaker.name}${actionLabels[action]}：${speaker.persona}`;
+  if (source === "manual") {
+    return `${base} 系统补一手，继续替 ${sideName} 扩大当下优势。`;
+  }
+
+  if (action === "EXPOSE") {
+    return `${base} ${sideName} 这边抛出新节点，试图把风向往自己这里继续拉。`;
+  }
+  if (action === "SARCASM") {
+    return `${base} ${sideName} 抓住对面的缝继续阴阳，观众情绪明显被带起来了。`;
+  }
+  if (action === "ANALYZE") {
+    return `${base} ${sideName} 试着把吵架节奏变成论点节奏。`;
+  }
+  if (action === "SUMMARIZE") {
+    return `${base} ${sideName} 开始收口，试图把这一回合定性。`;
+  }
+  return `${base} ${sideName} 继续追打当前最有效的论点。`;
+}
+
 function updateSentiment(detail: RuntimeBattleDetail, action: ActionType) {
   const current = detail.battle.sentiment;
   let positive = current.positive;
@@ -324,6 +408,79 @@ function buildOutcome(detail: RuntimeBattleDetail): {
   }
 
   return { ended: false };
+}
+
+function pickAutoSpeaker(detail: RuntimeBattleDetail) {
+  const targetSide = detail.battle.phase % 2 === 0 ? "B" : "A";
+  const sidePool = systemSpeakerCatalog[targetSide];
+  const speaker = sidePool[detail.battle.phase % sidePool.length] ?? sidePool[0];
+  if (!speaker) {
+    throw new Error(`No auto speaker configured for side ${targetSide}.`);
+  }
+  return speaker;
+}
+
+function pickAutoAction(detail: RuntimeBattleDetail, side: "A" | "B") {
+  const speaker =
+    side === "A"
+      ? systemSpeakerCatalog.A[detail.battle.phase % systemSpeakerCatalog.A.length]
+      : systemSpeakerCatalog.B[detail.battle.phase % systemSpeakerCatalog.B.length];
+  const preferred = speaker?.preferredActions ?? ["FOLLOW_UP"];
+  if (detail.battle.heat >= 80) {
+    return "SUMMARIZE" as ActionType;
+  }
+  if (Math.abs(detail.battle.swing) <= 5) {
+    return preferred[0] ?? "FOLLOW_UP";
+  }
+  if (detail.battle.phase >= 8) {
+    return preferred[preferred.length - 1] ?? "SUMMARIZE";
+  }
+  return preferred[(detail.battle.phase + 1) % preferred.length] ?? preferred[0] ?? "FOLLOW_UP";
+}
+
+async function appendAutoMessage(detail: RuntimeBattleDetail, source: "manual" | "auto") {
+  const speaker = pickAutoSpeaker(detail);
+  const action = pickAutoAction(detail, speaker.side);
+  const impact = actionImpactTable[action];
+  const direction = speaker.side === "A" ? 1 : -1;
+
+  detail.battle.phase += 1;
+  detail.battle.heat = clamp(detail.battle.heat + impact.heat, 0, 100);
+  detail.battle.swing = clamp(detail.battle.swing + direction * impact.swing, -100, 100);
+  if (speaker.side === "A") {
+    detail.battle.scoreA += impact.score;
+  } else {
+    detail.battle.scoreB += impact.score;
+  }
+  detail.battle.updatedAt = new Date().toISOString();
+  detail.battle.lastMessageAt = detail.battle.updatedAt;
+  detail.battle.nextSpeakerHint = speaker.id;
+
+  messageCounter += 1;
+  detail.messages = [
+    ...detail.messages,
+    {
+      id: `msg_${messageCounter}`,
+      battleId: detail.battle.id,
+      topicId: detail.topic.id,
+      speakerInstanceId: speaker.id,
+      speakerName: speaker.name,
+      side: speaker.side,
+      action,
+      content: buildAutoMessageContent(speaker, action, detail, source),
+      createdAt: detail.battle.updatedAt,
+      impact: {
+        deltaHeat: impact.heat,
+        deltaSwing: direction * impact.swing,
+        deltaScoreA: speaker.side === "A" ? impact.score : 0,
+        deltaScoreB: speaker.side === "B" ? impact.score : 0
+      },
+      userTriggered: false
+    }
+  ];
+
+  updateSentiment(detail, action);
+  updateLiveTopic(detail);
 }
 
 async function finalizeBattle(
@@ -482,15 +639,7 @@ export async function applyAction(input: CreateActionInput) {
   refreshedInstance.cooldownTurns = 1;
   detail.loadout = buildLoadoutCards(detail);
   updateSentiment(detail, input.action);
-
-  const liveTopic = mockTopics.find((topic) => topic.id === detail.topic.id);
-  if (liveTopic) {
-    liveTopic.live = {
-      heat: detail.battle.heat,
-      swing: detail.battle.swing,
-      sentiment: detail.battle.sentiment
-    };
-  }
+  updateLiveTopic(detail);
 
   const outcome = buildOutcome(detail);
   if (outcome.ended && outcome.outcomeType && outcome.winnerSide) {
@@ -509,6 +658,39 @@ export async function applyAction(input: CreateActionInput) {
 
   return {
     producedMessageId: messageId,
+    state: detail.battle,
+    result: detail.result
+  };
+}
+
+export async function advanceBattle(input: AdvanceBattleInput) {
+  const detail = runtimeStore[input.battleId];
+  if (!detail) return null;
+  if (detail.battle.status === "ENDED") return { state: detail.battle, result: detail.result };
+
+  const steps = Math.max(1, input.steps ?? 1);
+
+  for (let index = 0; index < steps; index += 1) {
+    await appendAutoMessage(detail, input.source ?? "manual");
+
+    const outcome = buildOutcome(detail);
+    if (outcome.ended && outcome.outcomeType && outcome.winnerSide) {
+      await finalizeBattle(detail, {
+        outcomeType: outcome.outcomeType,
+        winnerSide: outcome.winnerSide
+      });
+      return { state: detail.battle, result: detail.result };
+    }
+  }
+
+  await persistRuntimeStore();
+  emitBattleEvent({
+    type: "battle:detail",
+    battleId: input.battleId,
+    detail: toPublicDetail(detail)
+  });
+
+  return {
     state: detail.battle,
     result: detail.result
   };

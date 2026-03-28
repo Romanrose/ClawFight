@@ -181,7 +181,10 @@ export function BattleRoom({ initialDetail }: BattleRoomProps) {
       <BattleHeader detail={detail} />
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300 md:flex-row md:items-center md:justify-between">
-        <span>{status}</span>
+        <div className="flex flex-col gap-1">
+          <span>{status}</span>
+          <span className="text-xs text-slate-500">系统会自动推进战局，新的系统发言会实时插入时间线。</span>
+        </div>
         {detail.result ? (
           <Link
             href={`/battles/${detail.battle.id}/result`}

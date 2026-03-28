@@ -3,9 +3,11 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
 import {
+  advanceBattle,
   applyAction,
   enterBattle,
   finalizeBattleManually,
+  getActiveBattleIds,
   getBattleDetail,
   getBattleMessages,
   getBattleResult,
@@ -18,6 +20,8 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
+const autoAdvanceEnabled = process.env.AUTO_ADVANCE_ENABLED !== "false";
+const autoAdvanceIntervalMs = Number(process.env.AUTO_ADVANCE_INTERVAL_MS ?? 4000);
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -226,6 +230,26 @@ app.post("/battles/:battleId/actions", async (request, response) => {
   }
 });
 
+app.post("/battles/:battleId/advance", async (request, response) => {
+  const result = await advanceBattle({
+    battleId: request.params.battleId,
+    steps: Number(request.body?.steps ?? 1),
+    source: "manual"
+  });
+
+  if (!result) {
+    response.status(404).json({
+      error: {
+        code: "CF_NOT_FOUND",
+        message: "Battle not found."
+      }
+    });
+    return;
+  }
+
+  response.json(result.state);
+});
+
 app.post("/battles/:battleId/finalize", async (request, response) => {
   const result = await finalizeBattleManually(request.params.battleId);
   if (!result) {
@@ -242,6 +266,20 @@ app.post("/battles/:battleId/finalize", async (request, response) => {
 });
 
 await initializeBattleStore();
+
+if (autoAdvanceEnabled) {
+  setInterval(() => {
+    void Promise.all(
+      getActiveBattleIds().map((battleId) =>
+        advanceBattle({
+          battleId,
+          steps: 1,
+          source: "auto"
+        })
+      )
+    );
+  }, autoAdvanceIntervalMs);
+}
 
 httpServer.listen(port, () => {
   console.log(`ClawFight API listening on http://localhost:${port}`);

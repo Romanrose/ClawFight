@@ -10,6 +10,8 @@ Current scaffold:
 - `GET /battles/:battleId/messages`
 - `GET /battles/:battleId/sentiment`
 - `GET /battles/:battleId/detail`
+- `POST /battles/:battleId/advance`
+- Background auto-advance loop for active battles
 
 Useful commands from repo root:
 
@@ -21,3 +23,8 @@ Persistence notes:
 
 - Default file: `apps/api/data/runtime-store.json`
 - Override with `BATTLE_STORE_FILE=/absolute/or/relative/path.json`
+
+Runtime notes:
+
+- Auto-advance is enabled by default
+- Tune with `AUTO_ADVANCE_ENABLED` and `AUTO_ADVANCE_INTERVAL_MS`
